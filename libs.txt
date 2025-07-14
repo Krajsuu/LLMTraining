@@ -1,0 +1,16 @@
+tf-keras
+transformers
+torch
+datasets
+gradio
+langchain
+pandas
+scikit-learn
+numpy
+tqdm
+accelerate
+peft
+bitsandbytes
+wandb
+evaluate
+gradio
