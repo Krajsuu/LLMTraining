@@ -1,4 +1,4 @@
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, VerificationMode
 import pandas
 from typing import List,Dict,Tuple
 import re
@@ -13,7 +13,7 @@ class JokeDataPreprocessor:
 
     def load_data(self, path : str) -> pandas.DataFrame:
         try:
-            data = load_dataset(path)
+            data = load_dataset(path, verification_mode=VerificationMode.NO_CHECKS)
             df = data['train'].to_pandas()
             return df
         except:

@@ -6,14 +6,14 @@ from transformers import (
 )
 import torch
 from peft import LoraConfig, get_peft_model, TaskType
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 @dataclass
 class ModelConfig:
-    model_name : str = "meta-llama/Llama-3.2-8B-Instruct"
-    cache_dir : Optional[str] = "./models"
-    torch_dtype : torch_dtype = torch.float16
+    model_name : str = "meta-llama/Llama-3.2-3B-Instruct"
+    cache_dir : Optional[str] = "./models"  # Poprawione z ".\\models"
+    torch_dtype : torch.dtype = torch.float16  # Poprawione z torch_dtype
     device_map: str = "auto"
     trust_remote_code: bool = True
 
@@ -24,25 +24,23 @@ class QLoRAConfig:
     bnb_4bit_quant_type: str = "nf4"
     bnb_4bit_use_double_quant: bool = True
 
-@dataclass
-class LoRAConfig:
-    r: int = 16
-    lora_alpha: int = 32
-    target_modules: list = None
-    lora_dropout: float = 0.1
-    bias: str = "none"
-    task_type: TaskType = TaskType.CAUSAL_LM
+from dataclasses import dataclass, field
 
-    def __post_init__(self):
-        if self.target_modules is None : 
-            self.target_modules = [
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj"
-            ]
+class MyLoRAConfig:
+    def __init__(self):
+        self.r = 16
+        self.lora_alpha = 32
+        self.target_modules = [
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj"
+        ]
+        self.lora_dropout = 0.1
+        self.bias = "none"
+        self.task_type = TaskType.CAUSAL_LM
 
 @dataclass
 class TrainingConfig:
-    output_dir: str = "./results"
+    output_dir: str = "./results"  # Poprawione z ".\\results"
     num_train_epochs: int = 3
     per_device_train_batch_size : int = 2
     gradient_accumulation_steps : int = 4
@@ -57,29 +55,27 @@ class TrainingConfig:
     save_total_limit : int = 3
 
     fp16: bool = True
-    gradient_checkpointing: bool = True
+    gradient_checkpointing: bool = False
     dataloader_pin_memory : bool = True
     remove_unused_columns : bool = True
-    evaluation_strategy: str = "steps"
+    evaluation_strategy: str = "no"
     do_eval: bool = False
 
 class ModelSetup:
     def __init__(self,
                 model_config: ModelConfig = None,
                 qlora_config: QLoRAConfig = None,
-                lora_config: LoraConfig = None):
+                lora_config: MyLoRAConfig = None):  # Poprawione z LoraConfig
         self.model_config = model_config or ModelConfig()
         self.qlora_config = qlora_config or QLoRAConfig()
-        self.lora_config = lora_config or LoRAConfig()
+        self.lora_config = lora_config or MyLoRAConfig()
 
         self.tokenizer = None
         self.model = None
 
-
     def check_gpu(self) -> bool:
         if not torch.cuda.is_available():
             raise RuntimeError("Not available CUDA")
-        
         return True
     
     def load_tokenizer(self) -> AutoTokenizer:
@@ -89,7 +85,10 @@ class ModelSetup:
             trust_remote_code = self.model_config.trust_remote_code
         )
 
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        # Ważne: ustaw padding token
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
         return self.tokenizer
     
@@ -102,7 +101,7 @@ class ModelSetup:
         )
     
     def load_model(self) -> AutoModelForCausalLM:
-       bnb_config = self.create_bnb_config
+       bnb_config = self.create_bnb_config()
 
        self.model = AutoModelForCausalLM.from_pretrained(
            self.model_config.model_name,
@@ -112,8 +111,11 @@ class ModelSetup:
             torch_dtype=self.model_config.torch_dtype,
             trust_remote_code=self.model_config.trust_remote_code
        ) 
-
+       
+       # Ważne ustawienia dla treningu
        self.model.config.use_cache = False
+       self.model.config.pretraining_tp = 1
+       
        return self.model
     
     def setup_lora(self):
@@ -125,12 +127,16 @@ class ModelSetup:
             bias=self.lora_config.bias,
             task_type=self.lora_config.task_type
         )
+        
         self.model = get_peft_model(self.model, peft_config)
+        
+        # Sprawdź, czy parametry wymagają gradientów
+        self.model.print_trainable_parameters()
+        
         return self.model
     
     def setup_full_model(self):
         self.check_gpu()
-
         self.load_tokenizer()
         self.load_model()
         self.setup_lora()
@@ -139,7 +145,7 @@ class ModelSetup:
     
 def get_training_args(config : TrainingConfig = None) -> TrainingArguments:
     if config is None : 
-        config = TrainingConfig
+        config = TrainingConfig()  # Poprawione - dodano ()
 
     return TrainingArguments(
         output_dir=config.output_dir,
@@ -152,12 +158,13 @@ def get_training_args(config : TrainingConfig = None) -> TrainingArguments:
         warmup_ratio=config.warmup_ratio,
         logging_steps=config.logging_steps,
         save_steps=config.save_steps,
-        eval_steps=config.eval_steps,
-        evaluation_strategy=config.evaluation_strategy,
+        eval_strategy=config.evaluation_strategy,
         save_total_limit=config.save_total_limit,
         fp16=config.fp16,
         gradient_checkpointing=config.gradient_checkpointing,
         dataloader_pin_memory=config.dataloader_pin_memory,
         remove_unused_columns=config.remove_unused_columns,
-        do_eval=config.do_eval
+        do_eval=config.do_eval,
+        report_to="wandb" if config.evaluation_strategy != "no" else None,
+        ddp_find_unused_parameters=False,  # Ważne dla unikania problemów z gradientami
     )
