@@ -12,8 +12,8 @@ from typing import Optional
 @dataclass
 class ModelConfig:
     model_name : str = "meta-llama/Llama-3.2-3B-Instruct"
-    cache_dir : Optional[str] = "./models"  # Poprawione z ".\\models"
-    torch_dtype : torch.dtype = torch.float16  # Poprawione z torch_dtype
+    cache_dir : Optional[str] = "./models"
+    torch_dtype : torch.dtype = torch.float16  
     device_map: str = "auto"
     trust_remote_code: bool = True
 
@@ -40,7 +40,7 @@ class MyLoRAConfig:
 
 @dataclass
 class TrainingConfig:
-    output_dir: str = "./results"  # Poprawione z ".\\results"
+    output_dir: str = "./results" 
     num_train_epochs: int = 3
     per_device_train_batch_size : int = 2
     gradient_accumulation_steps : int = 4
@@ -65,7 +65,7 @@ class ModelSetup:
     def __init__(self,
                 model_config: ModelConfig = None,
                 qlora_config: QLoRAConfig = None,
-                lora_config: MyLoRAConfig = None):  # Poprawione z LoraConfig
+                lora_config: MyLoRAConfig = None): 
         self.model_config = model_config or ModelConfig()
         self.qlora_config = qlora_config or QLoRAConfig()
         self.lora_config = lora_config or MyLoRAConfig()
@@ -85,7 +85,6 @@ class ModelSetup:
             trust_remote_code = self.model_config.trust_remote_code
         )
 
-        # Ważne: ustaw padding token
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -112,7 +111,6 @@ class ModelSetup:
             trust_remote_code=self.model_config.trust_remote_code
        ) 
        
-       # Ważne ustawienia dla treningu
        self.model.config.use_cache = False
        self.model.config.pretraining_tp = 1
        
@@ -130,7 +128,6 @@ class ModelSetup:
         
         self.model = get_peft_model(self.model, peft_config)
         
-        # Sprawdź, czy parametry wymagają gradientów
         self.model.print_trainable_parameters()
         
         return self.model
@@ -145,7 +142,7 @@ class ModelSetup:
     
 def get_training_args(config : TrainingConfig = None) -> TrainingArguments:
     if config is None : 
-        config = TrainingConfig()  # Poprawione - dodano ()
+        config = TrainingConfig()
 
     return TrainingArguments(
         output_dir=config.output_dir,
@@ -166,5 +163,5 @@ def get_training_args(config : TrainingConfig = None) -> TrainingArguments:
         remove_unused_columns=config.remove_unused_columns,
         do_eval=config.do_eval,
         report_to="wandb" if config.evaluation_strategy != "no" else None,
-        ddp_find_unused_parameters=False,  # Ważne dla unikania problemów z gradientami
+        ddp_find_unused_parameters=False
     )

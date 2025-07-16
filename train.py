@@ -115,7 +115,7 @@ class JokeTrainer:
             }
             json.dump(config_dict,f,indent=2,default=str)
 
-    def setup_wandb(self, project_name: str = "polish-jokes-llm") -> None:  # Poprawione z "projekt_name"
+    def setup_wandb(self, project_name: str = "polish-jokes-llm") -> None:
         if not self.use_wandb:
             return
         
